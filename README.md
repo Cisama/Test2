@@ -1,97 +1,110 @@
 # 维知 Agent
 
-维知是一个面向真实业务场景的智能体系统，支持多模型切换、上下文追溯、工具执行、记忆管理和技能扩展。
+> 英文名：Weizhi Agent；代码包与环境变量继续使用历史标识 `tongyong` / `TONGYONG_*`，以保持兼容。
 
-## 核心特性
+维知 Agent 是一个面向真实任务的通用 AI 智能体平台。它通过 Web 界面或 OpenAI 兼容 API 接收任务，由大模型规划并调用文件、终端、网页、记忆、附件和技能工具完成工作，同时保留会话、执行轨迹与交付证据。
 
-- **多模型支持**：支持通义千问、OpenAI、DeepSeek、Anthropic、MiniMax 等多种 LLM
-- **上下文可追溯**：每轮 turn 都会记录 runtime、context snapshot、model request/response、tool settlement 和 turn manifest
-- **多智能体/多策略扩展**：支持在上层引入任务理解、决策与编排策略
-- **记忆管理**：持久化记忆存储，支持上下文压缩和检索
-- **技能扩展**：可扩展的工具系统和技能市场
-- **现代化 Web UI**：支持实时对话、计划模式、附件上传和流式反馈
+## 核心能力
+
+- 多模型：支持 OpenAI、通义千问、DeepSeek、Anthropic、MiniMax、Gemini、Ollama 及 OpenAI 兼容服务。
+- 智能体执行：默认使用 LangGraph ReAct，也保留自研执行循环作为回退路径。
+- 工具系统：支持文件读写、终端、网页、附件、记忆、待办、工作区、技能和 MCP 工具。
+- 记忆与上下文：SQLite 保存会话与消息，ChromaDB 提供可选语义检索，并支持上下文压缩。
+- 多智能体：支持流水线与辩论模式，可配置角色、连接关系和任务队列。
+- 扩展能力：支持本地 Skill、技能市场、MCP Server 和自建技能。
+- 可观测性：通过 SSE 返回思考、工具调用、用量和完成状态，并记录 runtime trace。
+- Web UI：提供流式聊天、计划模式、附件、团队协作、模型配置、记忆与技能管理。
+
+## 技术栈
+
+- 后端：Python 3.11、FastAPI、LangChain、LangGraph、SQLite、ChromaDB
+- 前端：React 18、TypeScript、Vite 6
+- 运行方式：本地开发或 Docker
+- 默认端口：后端 `8000`，前端开发服务器 `5173`
 
 ## 快速开始
 
-### 使用 Docker（推荐）
+### 1. 配置模型
+
+复制环境变量示例，并至少配置一个模型供应商的 API Key。默认供应商是 EdgeFn，默认模型是 `GLM-4.5V`：
 
 ```bash
-# 复制并配置环境变量
 cp backend/.env.example backend/.env
-# 编辑 backend/.env 填入你的 API 密钥
-
-# 启动服务
-docker-compose up -d
-
-# 访问 http://localhost:8000
 ```
 
-### 本地开发
+在 `backend/.env` 中设置：
+
+```dotenv
+EDGEFN_API_KEY=your-api-key
+```
+
+也可以改用其他供应商，并通过 Web 设置页或相应环境变量选择模型。源码不包含可用 API Key。
+
+### 2. 本地开发
+
+后端依赖的单一事实源是 `backend/requirements.txt`：
 
 ```bash
-# 前端
-cd frontend && npm install && npm run dev
-
-# 后端（新终端）
-cd backend && uv sync && uvicorn app.main:app --reload
+cd backend
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## 环境变量
+另开终端启动前端：
 
-| 变量名 | 描述 | 必需 |
-|--------|------|------|
-| TONGYI_API_KEY | 通义千问 API 密钥 | 是 |
-| OPENAI_API_KEY | OpenAI API 密钥 | 否 |
-| ANTHROPIC_API_KEY | Anthropic API 密钥 | 否 |
-| DEEPSEEK_API_KEY | DeepSeek API 密钥 | 否 |
-| MINIMAX_API_KEY | MiniMax API 密钥 | 否 |
-
-## 项目结构
-
-```
-维知 Agent/
-├── backend/          # Python 后端
-│   ├── app/          # 应用代码
-│   ├── llm/          # LLM 适配器
-│   ├── tools/        # 工具实现
-│   └── data/         # 本地数据与证据文件
-├── frontend/         # React 前端
-│   └── src/          # 源代码
-├── docs/             # 文档
-└── Dockerfile        # Docker 配置
+```bash
+cd frontend
+npm ci
+npm run dev
 ```
 
-## 关键设计说明
+打开 `http://localhost:5173`。后端调试模式下的 API 文档位于 `http://localhost:8000/docs`。
 
-- **数据优先**：系统围绕 turn 级数据追溯展开，强调证据链完整性和可回放性
-- **中层已结构化**：上下文组装、运行态、artifact 存储和终局 manifest 已形成统一链路
-- **上层持续演进**：AgentPolicy 承接任务理解、决策和编排逻辑
-- **执行层沙盒**：`terminal` / `workspace_terminal` 支持 `sandbox_mode`、`sandbox_preset`、`sandbox_profile`，默认可由策略层回填
+### 3. Docker
 
-## 沙盒说明
+当前 Dockerfile 使用预构建的前端资源，因此先构建前端，并在仓库根目录准备 Docker Compose 使用的 `.env`：
 
-### 可用参数
+```bash
+cd frontend
+npm ci
+npm run build
+cd ..
+cp .env.example .env
+# 编辑 .env，填入 EDGEFN_API_KEY 或其他供应商凭据
+docker compose up --build -d
+```
 
-- `sandbox_mode`
-  - `off`：不启用沙盒
-  - `macos`：使用 macOS `sandbox-exec`
-- `sandbox_preset`
-  - `read_only`
-  - `workspace_only`
-  - `network_off`
-- `sandbox_profile`
-  - 自定义 `sandbox-exec` profile 文本
+容器当前暴露后端 API；使用 `http://localhost:8000/health` 检查状态。Web UI 开发模式仍通过 `frontend` 目录下的 `npm run dev` 启动。
 
-### 规则
+## 主要目录
 
-- `sandbox_preset` 与 `sandbox_profile` 只能二选一
-- 当工具调用未显式传入沙盒参数时，会优先读取当前 turn strategy 的默认值
-- `workspace_terminal` 默认仍在会话工作区内执行，沙盒是额外约束
+```text
+.
+├── backend/app/       # FastAPI、Agent、LLM、工具、记忆与网关
+├── frontend/src/      # React Web UI
+├── mcp_servers/       # 内置 MCP Server 示例
+├── docs/              # 当前架构、API 与专题文档
+├── notes/             # 开发记录
+├── Dockerfile
+└── docker-compose.yml
+```
 
-## API 文档
+运行时数据默认写入 `backend/data/`，也可以通过 `TONGYONG_DATA_DIR` 改写。该目录不会提交到 Git。
 
-启动后访问 http://localhost:8000/docs 查看完整的 API 文档。
+## 文档
 
-## License
+- [架构与调用链](docs/CODEGRAPH.md)
+- [API 入口速查](docs/API.md)
+- [Agent 能力说明](docs/AGENT_CAPABILITIES.md)
+- [Agent 协作说明](AGENTS.md)
 
-MIT
+带日期的代码审查、`historical-reviews/` 和标注为“历史方案”的文档仅用于追溯，不代表当前实现。
+
+## 安全提示
+
+- 不要提交 `.env`、本地数据库、模型密钥或第三方凭据。
+- `terminal` 与 `workspace_terminal` 可以执行系统命令；生产部署应启用权限、审批与隔离策略。
+- 当前业务管理 API 未统一启用身份认证，不应直接暴露在公网。

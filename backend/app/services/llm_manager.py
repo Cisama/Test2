@@ -97,7 +97,7 @@ class LLMManager:
 
     def _default_model(self) -> str:
         # W5-2 (2026-07-09): 兜底默认模型从 glm-5.2 → GLM-4.5V,
-        # 配合 edgefn.py 的 HARDCODED_API_KEY, 部署不配 llm_config.json 也能跑
+        # EdgeFn 凭据由环境变量或本地运行时配置提供。
         return getattr(self, "config", {}).get("default_model", "GLM-4.5V")
 
     def _default_model_for(self, provider_id: str) -> str:

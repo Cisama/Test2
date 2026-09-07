@@ -77,7 +77,7 @@ BUILTIN_CONFIGS: List[Dict[str, Any]] = [
         'name': '⚡ EdgeFn聚合',
         'protocol': 'openai_compatible',
         'base_url': 'https://api.edgefn.net/v1',
-        'default_model': 'GLM-4.5V',  # W5-2: 部署默认 GLM-4.5V (跟 config.py / HARDCODED_API_KEY 对齐)
+        'default_model': 'GLM-4.5V',  # 与 config.py 的默认模型保持一致
         'models': ['GLM-4.5V', 'GLM-5.2', 'GLM-4-flash', 'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat'],
         'icon': '⚡',
         'color': '#F59E0B',

@@ -1,12 +1,14 @@
 
 
-# 同通用 Agent 智能迭代改造方案
+# 维知 Agent 智能迭代改造方案（历史）
+
+> **历史方案（非当前架构）**：本文保留早期改造目标和研究过程。工具系统、Dreaming、Hermes、多智能体与权限框架已有不同程度的实现；当前状态请以 [CODEGRAPH.md](CODEGRAPH.md) 和 [AGENT_CAPABILITIES.md](AGENT_CAPABILITIES.md) 为准。
 
 ## 一、背景与目标
 
 ### 1.1 项目现状
 
-当前同通用 Agent 项目是一个基于 FastAPI 后端与 React 前端的智能对话系统，其核心架构包含以下关键组件：
+当时的维知 Agent 项目是一个基于 FastAPI 后端与 React 前端的智能对话系统，其核心架构包含以下关键组件：
 
 **后端核心模块**
 

@@ -1,5 +1,7 @@
 # 全公司智能体记忆系统设计方案
 
+> **独立参考设计**：本文面向企业级 MySQL/Qdrant 部署，不是维知 Agent 当前 SQLite/ChromaDB 实现的运行说明。当前实现请参阅 [CODEGRAPH.md](CODEGRAPH.md)。
+
 **文档版本**: v1.0  
 **编写日期**: 2025-05-28  
 **状态**: 草稿

@@ -1,5 +1,7 @@
 # Agent 能力增强方案
 
+> **历史方案（非当前能力说明）**：本文记录工具系统落地前的设计过程，其中“缺少工具”等描述已经过时。当前能力请以 [AGENT_CAPABILITIES.md](AGENT_CAPABILITIES.md) 和 [CODEGRAPH.md](CODEGRAPH.md) 为准。
+
 ## 问题分析
 
 ### 当前 Agent 的局限性

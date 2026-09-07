@@ -1,0 +1,453 @@
+.add-model-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.add-model-dialog {
+  background: var(--text-primary);
+  border-radius: 12px;
+  width: 95%;
+  max-width: 1200px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.add-model-dialog-wide {
+  max-width: 1200px;
+}
+
+.add-model-header {
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.add-model-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.add-model-header p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.add-model-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.add-model-close:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.add-model-body {
+  padding: 24px 28px 28px;
+  color: #dbe5f5;
+}
+
+/* 顶部分类标签，和cc完全一致 */
+.provider-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.provider-tab {
+  padding: 12px 24px;
+  background: #f5f5f5;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.provider-tab.active {
+  background: #165dff;
+  color: var(--text-primary);
+}
+
+.provider-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+/* 预设供应商网格，完全对齐cc的样式 */
+.provider-template-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.provider-template {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  position: relative;
+  min-width: fit-content;
+}
+
+.provider-template:hover {
+  background: #f0f2f5;
+  border-color: #d0d7ff;
+}
+
+.provider-template.active {
+  background: #e8f0ff;
+  border-color: #165dff;
+  color: #165dff;
+}
+
+.provider-icon {
+  font-size: 16px;
+}
+
+.provider-name {
+  white-space: nowrap;
+}
+
+/* 右上角星标，和cc一致 */
+.provider-template.starred .star-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 12px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  padding: 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.add-model-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.format-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.format-pill {
+  border: 1px solid var(--border-color, #d9d9d9);
+  background: var(--input-bg, #fff);
+  color: var(--text-primary, #333);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.format-pill.active {
+  border-color: var(--primary-color, #165dff);
+  background: color-mix(in srgb, var(--primary-color, #165dff) 12%, var(--input-bg, #fff));
+  color: var(--primary-color, #165dff);
+}
+
+.format-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary, #777);
+  line-height: 1.5;
+}
+
+.format-hint code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-secondary, #f6f7f9);
+}
+
+.add-model-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.add-model-field label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.add-model-field label span {
+  font-weight: normal;
+  color: #999;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.add-model-field input,
+.add-model-field textarea {
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fbff;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.add-model-field input:focus,
+.add-model-field textarea:focus {
+  outline: none;
+  border-color: #165dff;
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.1);
+}
+
+.add-model-field textarea {
+  min-height: 80px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.json-textarea {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  min-height: 160px;
+}
+
+.advanced-toggle {
+  background: none;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.advanced-toggle:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.add-model-status {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.add-model-status.pending {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.add-model-status.success {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.add-model-status.error {
+  background: #fff2f0;
+  color: #ff4d4f;
+  border: 1px solid #ffccc7;
+}
+
+.add-model-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.add-model-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn-test {
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #d9d9d9 !important;
+}
+
+.btn-test:hover {
+  background: #e6e6e6;
+  border-color: #ccc;
+}
+
+.btn-save {
+  background: #165dff;
+  color: var(--text-primary);
+}
+
+.btn-save:hover {
+  background: #0d47d9;
+}
+
+/* 次按钮：灰底，跟主按钮并排 */
+.btn-save-secondary {
+  background: var(--input-bg, #f5f5f5);
+  color: var(--text-primary, #333);
+  border: 1px solid var(--border-color, #d9d9d9);
+}
+
+.btn-save-secondary:hover:not(:disabled) {
+  background: var(--hover-bg, #eaeaea);
+  border-color: var(--primary-color, #165dff);
+}
+
+.add-model-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 底部操作区分左右两组 */
+.provider-actions {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.provider-actions-left,
+.provider-actions-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.provider-actions-right {
+  margin-left: auto;
+}
+
+/* 字段下方提示文字，例如"已配置 sk-...16217，留空保持不变" */
+.add-model-field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  line-height: 1.5;
+}
+
+.provider-search {
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fbff;
+  font-size: 14px;
+}
+
+.provider-search:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.provider-group {
+  margin-bottom: 24px;
+}
+
+.provider-group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+.provider-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.provider-group-desc {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.65);
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+
+.provider-search {
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.provider-search:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.provider-group {
+  margin-bottom: 24px;
+}
+
+.provider-group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+
+.provider-group-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+

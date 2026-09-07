@@ -1,0 +1,72 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+.venv*/
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# Local
+.git.bak/
+.DS_Store
+.vercel/
+
+# Logs
+*.log
+nohup.out
+
+# Data (本地数据)
+data/
+backend/data/
+backend/app/data/
+None/
+backend/None/
+cache_data_*.json
+
+# Frontend cache
+frontend/.vite/
+
+# Local tool caches (not committed)
+.codegraph/
+.hermes/
+
+# Debug and test files
+backend/*.png
+backend/*.html
+backend/test_*.py
+backend/tests/
+frontend/diagnose.html
+frontend/test-*.html
+frontend/view-*.html
+frontend/layout-*.png
+*.png
+
+# Docs (allow only specific)
+*.md
+!README.md
+!USER.md
+!AGENTS.md
+!docs/CODEGRAPH.md
+!docs/CODE_REVIEW_2026_06_21.md
+!docs/API.md
+!docs/AGENT_CAPABILITIES.md
+!docs/AGENT_ENHANCEMENT.md
+!docs/TRANSFORMATION_PLAN.md
+!docs/agent-memory-system-design.md
+!docs/historical-reviews/
+!notes/
+!notes/**/*.md
+!notes/.foam/
+!notes/.foam/**
+!notes/.vscode/
+!notes/.vscode/*.json

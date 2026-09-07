@@ -1,0 +1,428 @@
+/**
+ * MarkdownContent.css — chat-friendly markdown 渲染 (W4-30)
+ * 配色用 theme variables, 在 user (深气泡) 和 agent (浅气泡) 下都好看
+ */
+
+.md-content {
+  font-family: var(--font, sans-serif);
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: inherit;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* ── 段落 ── */
+.md-content .md-p {
+  margin: 0;
+}
+.md-content .md-p + .md-p { margin-top: 8px; }
+
+/* 段落之间间隔 (当内容有多个 block 时) */
+.md-content > * + * { margin-top: 10px; }
+.md-content .md-p:first-child { margin-top: 0; }
+.md-content > *:last-child { margin-bottom: 0; }
+
+/* ── 标题 ── */
+.md-content .md-h1,
+.md-content .md-h2,
+.md-content .md-h3,
+.md-content .md-h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.md-content .md-h1 { font-size: 1.25em; margin-top: 4px; }
+.md-content .md-h2 { font-size: 1.15em; margin-top: 4px; }
+.md-content .md-h3 { font-size: 1.05em; margin-top: 2px; }
+.md-content .md-h4 { font-size: 1em; }
+
+/* ── 列表 ── */
+.md-content .md-ul,
+.md-content .md-ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+.md-content .md-li {
+  margin: 2px 0;
+}
+.md-content .md-li::marker {
+  color: var(--text-tertiary, #a8a29e);
+  font-size: 0.9em;
+}
+.md-content .md-li > .md-p {
+  margin: 0;
+}
+.md-content .md-li + .md-li {
+  margin-top: 4px;
+}
+
+/* ── 行内 ── */
+.md-content .md-strong {
+  font-weight: 600;
+  color: inherit;
+}
+.md-content .md-em {
+  font-style: italic;
+}
+.md-content .md-del {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* ── 链接 ── */
+.md-content .md-link {
+  color: var(--accent, #f59e0b);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.12s ease;
+  word-break: break-all;
+}
+.md-content .md-link:hover {
+  border-bottom-color: currentColor;
+}
+
+/* User 气泡用白底深色, 链接用浅色 */
+.md-content--user .md-link {
+  color: #BFDBFE;
+}
+.md-content--user .md-link:hover {
+  border-bottom-color: #BFDBFE;
+}
+
+/* ── 引用 ── */
+.md-content .md-blockquote {
+  margin: 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent, #f59e0b);
+  background: rgba(0, 0, 0, 0.20);
+  border-radius: 0 6px 6px 0;
+  color: inherit;
+  font-style: italic;
+  opacity: 0.92;
+}
+.md-content .md-blockquote > *:first-child { margin-top: 0; }
+.md-content .md-blockquote > *:last-child { margin-bottom: 0; }
+
+.md-content--user .md-blockquote {
+  background: rgba(0, 0, 0, 0.20);
+  border-left-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── 水平线 ── */
+.md-content .md-hr {
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.15;
+  margin: 8px 0;
+}
+
+/* ── 行内 code ── */
+.md-content .md-code-inline {
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.88em;
+  word-break: break-all;
+}
+
+.md-content--user .md-code-inline {
+  background: rgba(0, 0, 0, 0.30);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: #FFFFFF;
+}
+
+/* ── 代码块 ── */
+.md-content .md-code-block {
+  position: relative;
+  margin: 6px 0;
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.md-content--user .md-code-block {
+  background: rgba(0, 0, 0, 0.30);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.md-content .md-code-pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+  color: #E5E7EB;
+}
+
+.md-content .md-code-pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre;
+}
+
+.md-content .md-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.75);
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font, sans-serif);
+  transition: all 0.12s ease;
+  z-index: 1;
+}
+
+.md-content .md-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+/* ── 表格 ── */
+.md-content .md-table-wrap {
+  overflow-x: auto;
+  margin: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+}
+
+.md-content--user .md-table-wrap {
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
+.md-content .md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+.md-content .md-th,
+.md-content .md-td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+}
+
+.md-content .md-th {
+  background: rgba(0, 0, 0, 0.30);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.md-content .md-tbody .md-tr:last-child .md-td {
+  border-bottom: none;
+}
+
+.md-content .md-tbody .md-tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── GFM: Task list ── */
+.md-content input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+/* ── 选区高亮 ── */
+.md-content ::selection {
+  background: var(--accent-subtle, rgba(245, 158, 11, 0.30));
+}
+
+.md-content--user ::selection {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── W4-40: 文件路径链接 (Codex/Claude 风格 pill) ── */
+.md-content .file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875em;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 100%;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 80ms;
+}
+.md-content .file-link:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+.md-content .file-link:active {
+  transform: translateY(0.5px);
+}
+.md-content .file-link__icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.md-content .file-link__name {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.md-content .file-link__dir {
+  opacity: 0.55;
+  margin-left: 2px;
+  font-weight: 400;
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+/* 不同文件类型用不同 accent 色 (左 border) */
+.md-content .file-link--code   { border-left: 2px solid #3b82f6; padding-left: 5px; }
+.md-content .file-link--text   { border-left: 2px solid #6b7280; padding-left: 5px; }
+.md-content .file-link--image  { border-left: 2px solid #a855f7; padding-left: 5px; }
+
+.file-link-preview,
+.md-image-link-preview {
+  display: block;
+  margin: 8px 0;
+  overflow: hidden;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.file-link-preview img,
+.md-image-link-preview img {
+  display: block;
+  max-width: min(360px, 100%);
+  max-height: 320px;
+  object-fit: contain;
+}
+
+.md-image-link-wrap {
+  display: block;
+}
+.md-content .file-link--doc    { border-left: 2px solid #f59e0b; padding-left: 5px; }
+.md-content .file-link--generic{ border-left: 2px solid #9ca3af; padding-left: 5px; }
+/* user 气泡里 (深底) 调高对比 */
+.md-content--user .file-link {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.md-content--user .file-link:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+
+/* ── W4-44: FilePathLink actions (open/copy 按钮 + toast) ── */
+.md-content .file-link-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  max-width: 100%;
+}
+.md-content .file-link-wrap .file-link {
+  /* 让 pill 自身还能正常 inline, action 按钮浮在右侧 hover 时 */
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.md-content .file-link-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px 1px 4px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-left: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  vertical-align: baseline;
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+  opacity: 0;
+  transition: opacity 100ms, background 100ms, border-color 100ms;
+}
+.md-content .file-link-wrap:hover .file-link-action,
+.md-content .file-link-wrap:focus-within .file-link-action {
+  opacity: 1;
+}
+.md-content .file-link-action:hover {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  border-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+.md-content .file-link--copied {
+  background: color-mix(in srgb, #10b981 18%, transparent);
+  border-color: color-mix(in srgb, #10b981 40%, transparent);
+}
+.md-content .file-link__check {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: #10b981;
+  font-weight: 700;
+}
+.md-content .file-link-toast {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: #1f2937;
+  color: #f3f4f6;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  font-family: var(--font, sans-serif);
+}
+.md-content .file-link-toast code {
+  display: inline-block;
+  padding: 0 4px;
+  background: #374151;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  margin-left: 2px;
+}
+.md-content .file-link-toast::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 16px;
+  border: 4px solid transparent;
+  border-top-color: #1f2937;
+}
+.md-content .file-link-toast kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 2px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}

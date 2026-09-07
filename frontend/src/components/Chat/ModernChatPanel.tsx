@@ -1,0 +1,1082 @@
+/**
+ * ModernChatPanel — 维知 (W5-3 重设计)
+ *
+ * 居中聊天: max-width 980px, 消息气泡 760px
+ * 顶部不再有 chat-header (由 App.tsx 顶部标题栏承担)
+ * 空状态: 维知 飘逸 wordmark + 一句引导 + 3-4 个快捷入口
+ * 流式生成时通过 weizhi:streaming CustomEvent 让顶部标题栏出现 1px 横扫
+ */
+
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useStreamChat } from '../../hooks/useStreamChat';
+import { Message, ContextInfo, ArtifactPreview, Attachment } from '../../types';
+import { uploadAttachments } from '../../api/attachments';
+import { MarkdownContent } from './MarkdownContent';
+import { detectFilePaths, getFileIcon } from './pathDetector';
+import ComposerModelControl from './ComposerModelControl';
+import PlanModeToggle from './PlanModeToggle';
+import PlanCard from './PlanCard';
+import { buildPlan, type PlanData } from '../../api/plan';
+import { transcribeVoice, speakText } from '../../api/voice';
+import './ModernChatPanel.css';
+
+// ── Constants ─────────────────────────────────────────
+const AGENT_NAME = '维知';
+const AGENT_LABEL = '维知';
+
+
+// ── Helpers ─────────────────────────────────────────
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString('zh-CN', {
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatTimeShort(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' +
+    d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function splitCodeBlocks(text: string): Array<{ type: 'text' | 'code'; content: string }> {
+  const parts: Array<{ type: 'text' | 'code'; content: string }> = [];
+  const regex = /```(\w*)\s*\n([\s\S]*?)```/g;
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push({ type: 'text', content: text.slice(lastIdx, match.index).trim() });
+    }
+    parts.push({ type: 'code', content: match[2].trim() });
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < text.length) {
+    parts.push({ type: 'text', content: text.slice(lastIdx).trim() });
+  }
+  return parts;
+}
+
+function CodeBlock({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const lines = code.split('\n');
+  const shouldCollapse = lines.length > 16 || code.length > 1200;
+  const preview = shouldCollapse && !expanded ? lines.slice(0, 12).join('\n') + (lines.length > 12 ? '\n…' : '') : code;
+  return (
+    <div className="chat-code-block">
+      <div className="chat-code-actions">
+        {shouldCollapse && (
+          <button
+            className="chat-code-toggle-btn"
+            onClick={() => setExpanded(v => !v)}
+          >
+            {expanded ? '收起代码' : `展开代码 (${lines.length} 行)`}
+          </button>
+        )}
+        <button
+          className="chat-code-copy-btn"
+          onClick={() => {
+            navigator.clipboard.writeText(code);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? '✓ 已复制' : '复制'}
+        </button>
+      </div>
+      <pre><code>{preview}</code></pre>
+    </div>
+  );
+}
+
+function ArtifactPreviewCard({ artifact }: { artifact: ArtifactPreview }) {
+  const backend = (typeof window !== 'undefined' && (window as any).__BACKEND_URL__) || 'http://127.0.0.1:8000';
+  const previewUrl = artifact.preview_url.startsWith('http') ? artifact.preview_url : backend + artifact.preview_url;
+  const openUrl = artifact.open_url.startsWith('http') ? artifact.open_url : backend + artifact.open_url;
+  if (artifact.kind === 'image') {
+    return (
+      <div className="chat-artifact chat-artifact--image">
+        <div className="chat-artifact-header">
+          <span className="chat-artifact-title">{artifact.name}</span>
+          <div className="chat-artifact-actions">
+            <a className="chat-artifact-open" href={openUrl} target="_blank" rel="noopener noreferrer">打开</a>
+            <a className="chat-artifact-open" href={previewUrl} target="_blank" rel="noopener noreferrer">预览</a>
+          </div>
+        </div>
+        <a href={openUrl} target="_blank" rel="noopener noreferrer">
+          <img className="chat-artifact-image" src={openUrl} alt={artifact.name} />
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div className="chat-artifact">
+      <div className="chat-artifact-header">
+        <span className="chat-artifact-title">{artifact.name}</span>
+        <div className="chat-artifact-actions">
+          <a className="chat-artifact-open" href={previewUrl} target="_blank" rel="noopener noreferrer">预览</a>
+          <a className="chat-artifact-open" href={openUrl} target="_blank" rel="noopener noreferrer">打开</a>
+        </div>
+      </div>
+      <iframe
+        className="chat-artifact-frame"
+        src={previewUrl}
+        title={artifact.name}
+        sandbox="allow-scripts allow-forms allow-pointer-lock allow-popups allow-modals"
+      />
+    </div>
+  );
+}
+
+function toBackendUrl(url: string): string {
+  const backend = (typeof window !== 'undefined' && (window as any).__BACKEND_URL__) || 'http://127.0.0.1:8000';
+  return url.startsWith('http') ? url : backend + url;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function AttachmentView({ attachment, onRemove }: { attachment: Attachment; onRemove?: () => void }) {
+  const src = toBackendUrl(attachment.preview_url || attachment.url);
+  const openUrl = toBackendUrl(attachment.open_url || attachment.url);
+  const status = attachment.extraction_status || '';
+  const summary = attachment.extraction_summary || '';
+  const statusLabel = status === 'ocr_extracted'
+    ? 'OCR 已识别'
+    : status === 'ocr_unavailable'
+      ? 'OCR 不可用'
+      : status === 'ocr_no_text'
+        ? '未识别文字'
+        : status === 'metadata_only'
+          ? '仅元数据'
+          : status === 'error'
+            ? '解析失败'
+            : '';
+  const statusClass = status === 'ocr_extracted'
+    ? 'is-ok'
+    : status === 'ocr_unavailable' || status === 'ocr_no_text' || status === 'metadata_only'
+      ? 'is-warn'
+      : status === 'error'
+        ? 'is-error'
+        : '';
+  if (attachment.kind === 'image') {
+    return (
+      <div className="chat-attachment chat-attachment--image">
+        <a href={openUrl} target="_blank" rel="noopener noreferrer">
+          <img src={src} alt={attachment.name || attachment.filename} />
+        </a>
+        <div className="chat-attachment-meta">
+          <span>{attachment.name || attachment.filename}</span>
+          <span>{formatFileSize(attachment.size)}</span>
+          {statusLabel && <span className={`chat-attachment-status ${statusClass}`}>{statusLabel}</span>}
+          {summary && <span className="chat-attachment-summary">{summary}</span>}
+          {onRemove && <button onClick={onRemove} aria-label="移除附件">×</button>}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="chat-attachment chat-attachment--file">
+      <a href={openUrl} target="_blank" rel="noopener noreferrer">
+        <span className="chat-attachment-icon">
+          {attachment.kind === 'pdf' ? 'PDF' : attachment.kind === 'table' ? 'XLS' : attachment.kind === 'document' ? 'DOC' : 'FILE'}
+        </span>
+        <span className="chat-attachment-name">{attachment.name || attachment.filename}</span>
+        <span className="chat-attachment-size">{formatFileSize(attachment.size)}</span>
+      </a>
+      {statusLabel && <div className={`chat-attachment-status ${statusClass}`}>{statusLabel}</div>}
+      {summary && <div className="chat-attachment-summary">{summary}</div>}
+      {onRemove && <button onClick={onRemove} aria-label="移除附件">×</button>}
+    </div>
+  );
+}
+
+function buildLocalFileHref(path: string): string {
+  if (/^(?:https?|file|ftp):\/\//.test(path)) return path;
+  const backend = (typeof window !== 'undefined' && (window as any).__BACKEND_URL__) || 'http://127.0.0.1:8000';
+  return backend + '/api/files/serve?path=' + encodeURIComponent(path);
+}
+
+function InlineImagePreviews({ text }: { text: string }) {
+  const images = useMemo(() => {
+    const seen = new Set<string>();
+    return detectFilePaths(text)
+      .map((item) => item.path)
+      .filter((path) => getFileIcon(path) === 'image')
+      .filter((path) => path.includes('/') || path.startsWith('~') || path.startsWith('.'))
+      .filter((path) => {
+        if (seen.has(path)) return false;
+        seen.add(path);
+        return true;
+      });
+  }, [text]);
+
+  if (images.length === 0) return null;
+  return (
+    <div className="chat-inline-images">
+      {images.map((path) => {
+        const href = buildLocalFileHref(path);
+        return (
+          <a key={path} className="chat-inline-image" href={href} target="_blank" rel="noopener noreferrer">
+            <img src={href} alt={path.split('/').pop() || path} />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Typing Indicator (文字 + 加载点, 不要头像那一行) ─────────
+function TypingIndicator({ currentTool, toolElapsed, progressText }: {
+  currentTool: { name: string; emoji: string; startTime: number } | null;
+  toolElapsed: number;
+  progressText: string;
+}) {
+  return (
+    <div className="chat-typing">
+      <div className="chat-typing-content">
+        <div className="chat-typing-dots">
+          <span /><span /><span />
+        </div>
+        <span className="chat-typing-label">
+          {currentTool
+            ? `${AGENT_LABEL} 正在调用 ${currentTool.name}… (${toolElapsed >= 1000 ? (toolElapsed / 1000).toFixed(2) + 's' : `${toolElapsed}ms`})`
+            : progressText || `${AGENT_LABEL} 正在思考…`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// // ── Token Usage Bar ───────────────────────────────────────────────────
+function TokenUsageRing({ contextInfo, isCompressing, savedFlash, onCompress }: {
+  contextInfo: ContextInfo | null;
+  isCompressing: boolean;
+  savedFlash: string | null;
+  onCompress: () => void;
+}) {
+  if (!contextInfo) return null;
+  const pct = Math.min(100, Math.max(0, contextInfo.percent));
+  const R = 11;
+  const C = 2 * Math.PI * R;
+  const dash = (pct / 100) * C;
+  const title = `上下文 ${contextInfo.estimated_tokens} / ${contextInfo.threshold_tokens} tok (${pct.toFixed(0)}%) · 点击压缩`;
+  return (
+    <button
+      type="button"
+      className={`token-ring ${contextInfo.approaching ? 'is-approaching' : ''} ${isCompressing ? 'is-compressing' : ''}`}
+      onClick={onCompress}
+      disabled={isCompressing}
+      title={title}
+      aria-label={title}
+    >
+      <svg width="28" height="28" viewBox="0 0 28 28" className="token-ring-svg">
+        <circle className="token-ring-track" cx="14" cy="14" r={R} fill="none" strokeWidth="3" />
+        <circle
+          className="token-ring-fill"
+          cx="14" cy="14" r={R} fill="none" strokeWidth="3"
+          strokeDasharray={`${dash} ${C}`}
+          strokeLinecap="round"
+          transform="rotate(-90 14 14)"
+        />
+      </svg>
+      <span className="token-ring-label">{isCompressing ? '…' : `${pct.toFixed(0)}`}</span>
+      {savedFlash && <span className="token-ring-flash">{savedFlash}</span>}
+    </button>
+  );
+}
+
+// ── Message Bubble ─────────────────────────────────────────
+function MessageBubble({ msg, isLastInGroup, onDelete, onToggleThinking, thinkingExpanded }: {
+  msg: Message;
+  isLastInGroup: boolean;
+  onDelete: (id: string) => void;
+  onToggleThinking: (id: string) => void;
+  thinkingExpanded: boolean;
+}) {
+  const isUser = msg.role === 'user';
+  const parts = splitCodeBlocks(msg.content || '');
+  const trace = msg.trace || [];
+  const toolCallCount = trace.filter((s) => s.kind === 'tool_call').length;
+  const repeatedToolGroups = useMemo(() => {
+    const groups: Array<{ tool: string; count: number; indices: number[] }> = [];
+    let current: { tool: string; count: number; indices: number[] } | null = null;
+    trace.forEach((step, idx) => {
+      if (step.kind !== 'tool_call') {
+        current = null;
+        return;
+      }
+      if (current && current.tool === step.tool_name) {
+        current.count += 1;
+        current.indices.push(idx);
+      } else {
+        current = { tool: step.tool_name || 'unknown', count: 1, indices: [idx] };
+        groups.push(current);
+      }
+    });
+    return groups.filter((g) => g.count > 1);
+  }, [trace]);
+  const traceStats = useMemo(() => {
+    const textCount = trace.filter((s) => s.kind === 'text').length;
+    const resultCount = trace.filter((s) => s.kind === 'tool_result').length;
+    const errorCount = trace.filter((s) => s.kind === 'tool_error').length;
+    return { textCount, resultCount, errorCount };
+  }, [trace]);
+  return (
+    <div className={`chat-row chat-row--${isUser ? 'user' : 'agent'} ${isLastInGroup ? 'is-last' : ''}`}>
+      <div className="chat-row-body">
+        <div className={`chat-bubble chat-bubble--${isUser ? 'user' : 'agent'} chat-bubble--status-${msg.status}`}>
+          {!isUser && msg.thinking && (
+            <details className="chat-thinking" open={thinkingExpanded}>
+              <summary onClick={(e) => { e.preventDefault(); onToggleThinking(msg.id); }}>
+                💭 {AGENT_LABEL} 的思考过程
+              </summary>
+              <pre>{msg.thinking}</pre>
+            </details>
+          )}
+          {!isUser && (msg.trace?.length || 0) > 0 && (
+            <div className="chat-section chat-section--trace">
+              <div className="chat-section-title">
+                <span>🔎 执行过程</span>
+                <span className="chat-section-badge">{toolCallCount} 次工具调用 · {traceStats.resultCount} 次结果</span>
+              </div>
+              <details className="chat-trace" open={msg.status !== 'completed'}>
+                <summary>查看详细时间线</summary>
+                <div className="chat-trace-summary">
+                  <span>叙述：{traceStats.textCount} 段</span>
+                  <span>结果：{traceStats.resultCount} 次</span>
+                  {traceStats.errorCount > 0 && <span className="chat-trace-summary-warn">错误：{traceStats.errorCount} 次</span>}
+                  {repeatedToolGroups.length > 0 && (
+                    <span className="chat-trace-summary-warn">
+                      重复调用：{repeatedToolGroups.map((g) => `${g.tool} ×${g.count}`).join('、')}
+                    </span>
+                  )}
+                </div>
+                <ol className="chat-trace-list">
+                  {(msg.trace || []).map((step, idx) => {
+                    if (step.kind === 'text') {
+                      return (
+                        <li key={idx} className="chat-trace-step chat-trace-step--text">
+                          <span className="chat-trace-icon">📝</span>
+                          <div className="chat-trace-body">{step.content}</div>
+                        </li>
+                      );
+                    }
+                    if (step.kind === 'tool_call') {
+                      const argsPreview = step.args && Object.keys(step.args).length > 0
+                        ? Object.entries(step.args).map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ')
+                        : '';
+                      const prevTool = idx > 0 ? trace[idx - 1] : null;
+                      const isRepeat = prevTool?.kind === 'tool_call' && prevTool.tool_name === step.tool_name;
+                      return (
+                        <li key={idx} className={`chat-trace-step chat-trace-step--call ${isRepeat ? 'is-repeat' : ''}`}>
+                          <span className="chat-trace-icon">{step.emoji || '⚙️'}</span>
+                          <div className="chat-trace-body">
+                            <div className="chat-trace-tool-row">
+                              <span className="chat-trace-tool">{step.tool_name}</span>
+                              {isRepeat && <span className="chat-trace-repeat-tag">重复调用</span>}
+                            </div>
+                            {argsPreview && <span className="chat-trace-args">({argsPreview})</span>}
+                            <span className="chat-trace-step-label">正在调用</span>
+                          </div>
+                        </li>
+                      );
+                    }
+                    if (step.kind === 'tool_result') {
+                      const hasFull = !!(step.result_full && step.result_full.trim() && step.result_full.trim() !== (step.preview || '').trim());
+                      const prevTool = idx > 0 ? trace[idx - 1] : null;
+                      const relatedCall = prevTool?.kind === 'tool_call' && prevTool.tool_name === step.tool_name;
+                      return (
+                        <li key={idx} className={`chat-trace-step chat-trace-step--result ${relatedCall ? 'is-repeat-result' : ''}`}>
+                          <span className="chat-trace-icon">✅</span>
+                          <div className="chat-trace-body">
+                            <div className="chat-trace-tool-row">
+                              <span className="chat-trace-tool">{step.tool_name}</span>
+                              {typeof step.duration === 'number' && <span className="chat-trace-duration">{step.duration >= 1 ? `${step.duration.toFixed(2)}s` : `${Math.round(step.duration * 1000)}ms`}</span>}
+                            </div>
+                            <span className="chat-trace-step-label">已返回结果</span>
+                            {hasFull ? (
+                              <details className="chat-trace-detail">
+                                <summary>
+                                  <span className="chat-trace-preview-inline">{step.preview}</span>
+                                  <span className="chat-trace-expand-hint">展开完整结果</span>
+                                </summary>
+                                <pre className="chat-trace-preview chat-trace-preview--full">{step.result_full}</pre>
+                              </details>
+                            ) : (
+                              step.preview && <pre className="chat-trace-preview">{step.preview}</pre>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    }
+                    return (
+                      <li key={idx} className="chat-trace-step chat-trace-step--error">
+                        <span className="chat-trace-icon">⚠️</span>
+                        <div className="chat-trace-body">
+                          <span className="chat-trace-tool">{step.tool_name}</span>
+                          <span className="chat-trace-args">{step.content}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </details>
+            </div>
+          )}
+          {parts.map((p, i) => p.type === 'code'
+            ? <CodeBlock key={i} code={p.content} />
+            : <MarkdownContent key={i} text={p.content} variant={isUser ? 'user' : 'agent'} />
+          )}
+          <InlineImagePreviews text={msg.content || ''} />
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="chat-attachments">
+              {msg.attachments.map((attachment) => (
+                <AttachmentView key={attachment.id} attachment={attachment} />
+              ))}
+            </div>
+          )}
+          {!isUser && msg.artifactPreviews?.map((artifact) => (
+            <ArtifactPreviewCard key={artifact.path} artifact={artifact} />
+          ))}
+          {msg.progressLabel && msg.status === 'streaming' && (
+            <div className="chat-bubble-progress">{AGENT_LABEL}：{msg.progressLabel}</div>
+          )}
+          {msg.status === 'error' && (
+            <div className="chat-bubble-error">❌ {msg.error}</div>
+          )}
+          {msg.status === 'streaming' && !msg.content && !msg.progressLabel && (
+            <span className="chat-bubble-cursor" />
+          )}
+          {!isUser && (msg.needsContinue || msg.endedBy) && (
+            <div className="chat-bubble-progress">
+              {msg.stopReason
+                ? msg.stopReason
+                : msg.endedBy === 'budget'
+                  ? '本次输出达到预算上限，可继续。'
+                  : msg.endedBy === 'ask'
+                    ? '当前流程等待用户回答后继续。'
+                    : msg.endedBy === 'evidence_missing'
+                      ? '任务缺少交付证据，已提前停止。'
+                      : msg.endedBy === 'tool_required_retry_exhausted'
+                        ? '连续多轮未成功调用工具，已停止。'
+                        : '长任务达到单次执行上限，可继续执行。'}
+            </div>
+          )}
+        </div>
+        {isLastInGroup && (
+          <div className="chat-row-meta">
+            <span className="chat-row-time">{formatTime(msg.timestamp)}</span>
+            <button className="chat-row-delete" onClick={() => onDelete(msg.id)} title="删除消息" aria-label="删除消息">×</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main ─────────────────────────────────────────
+function shouldShowTime(msgs: Message[], idx: number): boolean {
+  if (idx === 0) return true;
+  const prev = msgs[idx - 1];
+  const cur = msgs[idx];
+  return cur.timestamp - prev.timestamp > 5 * 60 * 1000;
+}
+
+interface ModernChatPanelProps {
+  initialSessionId?: string;
+  onSessionCreated?: (sessionId: string) => void;
+}
+
+function ModernChatPanel({ initialSessionId, onSessionCreated }: ModernChatPanelProps) {
+  const [currentSessionId, setCurrentSessionId] = useState<string>(initialSessionId || '');
+  const [inputValue, setInputValue] = useState('');
+  const [waitingAnswer, setWaitingAnswer] = useState('');
+  const [customClarifyMode, setCustomClarifyMode] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [planPending, setPlanPending] = useState<PlanData | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planBuilding, setPlanBuilding] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [autoSpeakEnabled] = useState(true);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Sync session from parent
+  useEffect(() => {
+    setCurrentSessionId(initialSessionId || '');
+  }, [initialSessionId]);
+
+  // 状态机: 全部从 hook 拿
+  const {
+    messages, isStreaming, isLoading, errorMessage, progressText,
+    currentTool, toolElapsed, contextInfo, isCompressing, savedFlash,
+    expandedThinkingMsgId, waitingQuestion, pendingContinue,
+    setErrorMessage, handleSend, handleStop, handleCompress, handleDelete,
+    handleToggleThinking, handleClarifyAnswer, handleContinue,
+  } = useStreamChat({
+    sessionId: currentSessionId,
+    onSessionCreated: (sessionId) => {
+      setCurrentSessionId(sessionId);
+      onSessionCreated?.(sessionId);
+    },
+  });
+
+  // Tab title
+  useEffect(() => {
+    const baseTitle = '维知 · Weizhi';
+    if (isStreaming) {
+      const stage = progressText || '思考中…';
+      document.title = `⏳ ${stage} - ${baseTitle}`;
+    } else if (errorMessage) {
+      document.title = `❌ 错误 - ${baseTitle}`;
+    } else {
+      document.title = baseTitle;
+    }
+    return () => { document.title = baseTitle; };
+  }, [isStreaming, progressText, errorMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
+      if (activeAudioRef.current) activeAudioRef.current.pause();
+    };
+  }, []);
+
+  // 流式状态广播给 App.tsx 顶部标题栏 (用于 1px 横扫进度)
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('weizhi:streaming', { detail: { streaming: isStreaming } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('weizhi:streaming', { detail: { streaming: false } }));
+    };
+  }, [isStreaming]);
+
+  // 监听 plan_loaded 事件, 更新 PlanCard 状态
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      if (e.detail) {
+        setPlanPending(e.detail);
+      }
+    };
+    window.addEventListener('weizhi:plan_loaded', handler as EventListener);
+    return () => window.removeEventListener('weizhi:plan_loaded', handler as EventListener);
+  }, []);
+
+  // 全局监听: 拖动取消/点击空白 都清掉 isDraggingFile
+  useEffect(() => {
+    if (!isDraggingFile) return;
+    const clearDragging = () => setIsDraggingFile(false);
+    // dragend: 用户在任何地方松开 (ESC 或 拖到面板外释放)
+    window.addEventListener('dragend', clearDragging);
+    // 兜底: 用户在拖动状态下点击空白区域 (没真的 drop) 也清掉
+    window.addEventListener('mousedown', clearDragging);
+    return () => {
+      window.removeEventListener('dragend', clearDragging);
+      window.removeEventListener('mousedown', clearDragging);
+    };
+  }, [isDraggingFile]);
+
+  // Auto-scroll refs
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSpokenAssistantIdRef = useRef<string | null>(null);
+
+  const handleScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (el) {
+      const threshold = 120;
+      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isStreaming]);
+
+  const addFiles = useCallback(async (files: File[]) => {
+    if (!files.length || isUploading) return;
+    setIsUploading(true);
+    setErrorMessage(null);
+    try {
+      const uploaded = await uploadAttachments(files, currentSessionId || undefined);
+      setPendingAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err: any) {
+      setErrorMessage(err?.message || String(err));
+    } finally {
+      setIsUploading(false);
+    }
+  }, [currentSessionId, isUploading, setErrorMessage]);
+
+  const clearComposer = useCallback(() => {
+    setInputValue('');
+    setPendingAttachments([]);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, []);
+
+  const sendComposer = useCallback(async () => {
+    if ((inputValue.trim() || pendingAttachments.length > 0) && !isLoading && !isStreaming) {
+      if (planMode && inputValue.trim()) {
+        // 先构建计划, 等待用户批准
+        setPlanBuilding(true);
+        setPlanPending(null);
+        setErrorMessage(null);
+        try {
+          const plan = await buildPlan(inputValue.trim());
+          setPlanPending(plan);
+          setPlanId(plan.plan_id);
+        } catch (e: any) {
+          setErrorMessage(e?.message || '计划生成失败');
+          // 失败后直接走普通发送
+          handleSend(inputValue, pendingAttachments);
+          clearComposer();
+        } finally {
+          setPlanBuilding(false);
+        }
+      } else {
+        handleSend(inputValue, pendingAttachments);
+        clearComposer();
+      }
+    }
+  }, [inputValue, pendingAttachments, isLoading, isStreaming, planMode, handleSend, clearComposer, setErrorMessage]);
+
+  const approvePlan = useCallback(() => {
+    if (!planPending || !inputValue.trim()) return;
+    // 把计划作为上下文追加到消息, 让 LLM 按计划执行
+    const planText = planPending.steps.map((s, i) => `${i + 1}. ${s.action}${s.tool ? ' [' + s.tool + ']' : ''}`).join('\n');
+    const messageWithPlan = `用户请求: ${inputValue.trim()}\n\n计划:\n${planText}\n\n请按以上计划逐步执行, 每完成一步更新进度。`;
+    setPlanPending(null);
+    // 先把原消息发出去 (不含计划上下文), 实际发送带计划上下文的完整消息
+    handleSend(messageWithPlan, pendingAttachments, planId || undefined);
+    clearComposer();
+  }, [planPending, inputValue, pendingAttachments, handleSend, clearComposer]);
+
+  const rejectPlan = useCallback(() => {
+    setPlanPending(null);
+  }, []);
+
+  // Input handling
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+    }
+  }, []);
+
+  const handleKey = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+      e.preventDefault();
+      sendComposer();
+    }
+  }, [sendComposer, isComposing]);
+
+  const quickFillPrompt = useCallback((prompt: string) => {
+    setInputValue(prompt);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      }
+    });
+  }, []);
+
+  const handleSendClick = useCallback(() => {
+    sendComposer();
+  }, [sendComposer]);
+
+  const playAssistantSpeech = useCallback(async (text: string) => {
+    if (!autoSpeakEnabled || !text.trim()) return;
+    try {
+      const result = await speakText(text);
+      if (result.success && result.audio_url) {
+        const audioUrl = result.audio_url.startsWith('http') ? result.audio_url : `${window.location.origin}${result.audio_url}`;
+        if (activeAudioRef.current) {
+          activeAudioRef.current.pause();
+          activeAudioRef.current = null;
+        }
+        const audio = new Audio(audioUrl);
+        activeAudioRef.current = audio;
+        audio.onended = () => {
+          if (activeAudioRef.current === audio) activeAudioRef.current = null;
+        };
+        void audio.play().catch(() => undefined);
+      }
+    } catch {
+      // 语音播放失败不影响主聊天
+    }
+  }, [autoSpeakEnabled]);
+
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && m.status === 'completed' && m.content.trim());
+    if (!lastAssistant) return;
+    if (lastSpokenAssistantIdRef.current === lastAssistant.id) return;
+    lastSpokenAssistantIdRef.current = lastAssistant.id;
+    void playAssistantSpeech(lastAssistant.content);
+  }, [messages, playAssistantSpeech]);
+
+  const stopRecording = useCallback(async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recorder.stop();
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    if (isRecording || isLoading || isStreaming) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        setIsRecording(false);
+        if (recordingTimerRef.current) {
+          clearTimeout(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        audioChunksRef.current = [];
+        if (!blob.size) return;
+        try {
+          const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+          const result = await transcribeVoice(file, currentSessionId || undefined);
+          if (result.success && result.text) {
+            handleSend(result.text);
+          } else if (!result.success) {
+            setErrorMessage(result.error || '语音识别失败，请重试');
+          }
+        } catch (err: any) {
+          setErrorMessage('语音识别失败，请重试');
+        }
+      };
+      recorder.start();
+      setIsRecording(true);
+      recordingTimerRef.current = setTimeout(() => {
+        void stopRecording();
+      }, 60000);
+    } catch (err: any) {
+      const msg = String(err?.name || err?.message || '').toLowerCase();
+      if (msg.includes('notallowed') || msg.includes('permission') || msg.includes('denied')) {
+        setErrorMessage('麦克风权限未开启');
+      } else if (msg.includes('notfound')) {
+        setErrorMessage('未找到可用麦克风');
+      } else {
+        setErrorMessage('麦克风不可用');
+      }
+      setIsRecording(false);
+    }
+  }, [currentSessionId, isRecording, isLoading, isStreaming, setErrorMessage]);
+
+  const handleVoicePressStart = useCallback(() => {
+    void startRecording();
+  }, [startRecording]);
+
+  const handleVoicePressEnd = useCallback(() => {
+    void stopRecording();
+  }, [stopRecording]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    void addFiles(files);
+  }, [addFiles]);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    void addFiles(Array.from(e.dataTransfer.files || []));
+  }, [addFiles]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files || []);
+    if (files.length > 0) void addFiles(files);
+  }, [addFiles]);
+
+  // 工具 step history (group consecutive same-role msgs)
+  const visibleMessages = useMemo(() => {
+    return messages.map((m, i) => {
+      const prev = i > 0 ? messages[i - 1] : null;
+      const next = i < messages.length - 1 ? messages[i + 1] : null;
+      return {
+        msg: m,
+        isFirstInGroup: !prev || prev.role !== m.role,
+        isLastInGroup: !next || next.role !== m.role,
+      };
+    });
+  }, [messages]);
+
+  return (
+    <div
+      className={`chat-panel ${isDraggingFile ? 'is-dragging-file' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+      onDragLeave={() => { setIsDraggingFile(false); }}
+      onDrop={handleDrop}
+    >
+      {errorMessage && (
+        <div className="chat-error">
+          <span>{errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} aria-label="关闭错误">×</button>
+        </div>
+      )}
+
+      <div className="chat-messages" ref={messagesRef} onScroll={handleScroll}>
+        {messages.length === 0 ? (
+          <div className="chat-empty">
+            <h2 className="chat-empty-wordmark">
+              <span className="chat-empty-mark">维</span>
+              <span className="chat-empty-name">知</span>
+            </h2>
+            <p className="chat-empty-title">今天想完成什么？</p>
+            <p className="chat-empty-copy">可以直接发一句话，也可以上传文件、开启计划模式，或者让它帮你分析当前项目。</p>
+            <span className="chat-empty-hint">Enter 发送 · Shift+Enter 换行 · 拖拽文件以附加</span>
+            <div className="chat-empty-shortcuts">
+              <button type="button" className="chat-empty-shortcut" onClick={() => quickFillPrompt('帮我分析这个项目')}>
+                帮我分析这个项目
+              </button>
+              <button type="button" className="chat-empty-shortcut" onClick={() => quickFillPrompt('我上传文件后，请帮我总结重点')}>
+                上传文件让你总结
+              </button>
+              <button type="button" className="chat-empty-shortcut" onClick={() => quickFillPrompt('请开启计划模式，帮我分步骤完成这个任务')}>
+                开启计划模式执行任务
+              </button>
+              <button type="button" className="chat-empty-shortcut" onClick={() => quickFillPrompt('查看有哪些技能可用')}>
+                查看有哪些技能可用
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {visibleMessages.map(({ msg, isLastInGroup }, i) => {
+              return (
+                <div key={msg.id}>
+                  {shouldShowTime(messages, i) && (
+                    <div className="chat-time-sep">
+                      <span>{formatTimeShort(msg.timestamp)}</span>
+                    </div>
+                  )}
+                  <MessageBubble
+                    msg={msg}
+                    isLastInGroup={isLastInGroup}
+                    onDelete={handleDelete}
+                    onToggleThinking={handleToggleThinking}
+                    thinkingExpanded={expandedThinkingMsgId === msg.id}
+                  />
+                </div>
+              );
+            })}
+          </>
+        )}
+        {isStreaming && <TypingIndicator currentTool={currentTool} toolElapsed={toolElapsed} progressText={progressText} />}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {!isStreaming && pendingContinue && (
+        <div className="chat-statusbar chat-statusbar--continue">
+          <span className="chat-statusbar-dot" />
+          <span className="chat-statusbar-text">{pendingContinue.reason}</span>
+          <button className="btn btn-ghost" onClick={handleContinue} disabled={isLoading}>
+            继续执行
+          </button>
+        </div>
+      )}
+      {isRecording && (
+        <div className="chat-statusbar chat-statusbar--continue">
+          <span className="chat-statusbar-dot" />
+          <span className="chat-statusbar-text">正在录音中…</span>
+        </div>
+      )}
+
+      <div className="chat-input">
+        {isDraggingFile && <div className="chat-drop-overlay">松开以上传附件</div>}
+        {pendingAttachments.length > 0 && (
+          <div className="chat-pending-attachments">
+            {pendingAttachments.map((attachment) => (
+              <AttachmentView
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => setPendingAttachments((prev) => prev.filter((item) => item.id !== attachment.id))}
+              />
+            ))}
+          </div>
+        )}
+        {planPending && (
+          <div className="plan-card-container" style={{ marginBottom: '10px' }}>
+            <PlanCard
+              plan={planPending}
+              onApprove={approvePlan}
+              onReject={rejectPlan}
+              busy={isLoading}
+            />
+          </div>
+        )}
+        {planBuilding && (
+          <div className="plan-card-container" style={{ marginBottom: '10px', textAlign: 'center', padding: '12px', background: 'var(--accent-subtle, rgba(120,180,120,0.08))', borderRadius: '14px' }}>
+            <span style={{ fontSize: '14px', color: 'var(--text-secondary, #a8a29e)' }}>
+              📋 正在生成计划...
+            </span>
+          </div>
+        )}
+        {waitingQuestion && (
+          <div className="chat-clarify chat-clarify--panel chat-clarify--composer">
+            <div className="chat-clarify-question">{AGENT_LABEL} 需要补充信息：{waitingQuestion.question}</div>
+            <div className="chat-clarify-recommendation">推荐你直接选一个，或者点 Other 自己补充。</div>
+            <div className="chat-clarify-choices">
+              {waitingQuestion.choices.map((choice, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`chat-clarify-choice ${choice === 'Other' ? 'chat-clarify-choice--other' : ''}`}
+                  onClick={() => {
+                    if (choice === 'Other') {
+                      setCustomClarifyMode(true);
+                      setWaitingAnswer('');
+                      requestAnimationFrame(() => {
+                        const input = document.querySelector<HTMLInputElement>('input[name="clarify-answer"]');
+                        input?.focus();
+                      });
+                      return;
+                    }
+                    void handleClarifyAnswer(choice);
+                  }}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+            {customClarifyMode && (
+              <div className="chat-clarify-custom-hint">你可以直接输入自己的补充内容，然后发送。</div>
+            )}
+            <div className="chat-clarify-input">
+              <input
+                type="text"
+                name="clarify-answer"
+                value={waitingAnswer}
+                onChange={(e) => setWaitingAnswer(e.target.value)}
+                onKeyDown={async (e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter' && waitingAnswer.trim()) {
+                    const answer = waitingAnswer.trim();
+                    setWaitingAnswer('');
+                    setCustomClarifyMode(false);
+                    await handleClarifyAnswer(answer);
+                  }
+                }}
+                placeholder={customClarifyMode ? '输入你的补充内容...' : '选择一个推荐项，或点 Other 自己输入'}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="chat-clarify-send"
+                onClick={async () => {
+                  if (!waitingAnswer.trim()) return;
+                  const answer = waitingAnswer.trim();
+                  setWaitingAnswer('');
+                  setCustomClarifyMode(false);
+                  await handleClarifyAnswer(answer);
+                }}
+                disabled={!waitingAnswer.trim()}
+              >
+                发送
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="chat-input-box">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="chat-file-input"
+            onChange={handleFileInput}
+            accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.tsv,.xlsx,.xls,.docx,.pptx"
+          />
+          <textarea
+            ref={textareaRef}
+            value={inputValue}
+            onChange={handleInput}
+            onKeyDown={handleKey}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onPaste={handlePaste}
+            placeholder={isComposing ? '正在输入…' : `与 ${AGENT_NAME} 聊聊…`}
+            disabled={isLoading && !isStreaming}
+            rows={1}
+          />
+          <div className="chat-input-toolbar">
+            <div className="chat-input-toolbar-left">
+              <button
+                className="chat-attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading || isLoading}
+                title="上传附件"
+                aria-label="上传附件"
+              >
+                {isUploading ? '…' : '+'}
+              </button>
+              <PlanModeToggle planMode={planMode} onToggle={() => setPlanMode(m => !m)} disabled={isLoading || isStreaming} />
+              <ComposerModelControl />
+              <TokenUsageRing
+                contextInfo={contextInfo}
+                isCompressing={isCompressing}
+                savedFlash={savedFlash}
+                onCompress={() => handleCompress(false)}
+              />
+              <button
+                className={`chat-attach-btn ${isRecording ? 'is-recording' : ''}`}
+                onMouseDown={handleVoicePressStart}
+                onMouseUp={handleVoicePressEnd}
+                onMouseLeave={handleVoicePressEnd}
+                onTouchStart={handleVoicePressStart}
+                onTouchEnd={handleVoicePressEnd}
+                onClick={(e) => e.preventDefault()}
+                disabled={isLoading || isStreaming}
+                title={isRecording ? '录音中' : '按住说话'}
+                aria-label={isRecording ? '录音中' : '按住说话'}
+              >
+                {isRecording ? '🔴' : '🎤'}
+              </button>
+            </div>
+            <div className="chat-input-toolbar-right">
+              {isStreaming ? (
+                <button className="chat-stop-btn" onClick={handleStop} title="停止" aria-label="停止生成">■</button>
+              ) : (
+                <button className="chat-send-btn" onClick={handleSendClick} disabled={(!inputValue.trim() && pendingAttachments.length === 0) || isLoading || isComposing} title="发送" aria-label="发送">↑</button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default ModernChatPanel;

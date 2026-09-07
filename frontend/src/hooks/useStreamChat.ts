@@ -29,20 +29,6 @@ function looksLikeExecutionClaim(content: string): boolean {
   return EXECUTION_CLAIM_PATTERNS.some((p) => text.includes(p));
 }
 
-function stripToolMeta(content: string): string {
-  const metaStart = '<<<TOOL_META_JSON>>>';
-  const metaEnd = '<<<TOOL_META_JSON_END>>>';
-  const startIdx = content.indexOf(metaStart);
-  if (startIdx >= 0) {
-    const endIdx = content.indexOf(metaEnd, startIdx + metaStart.length);
-    if (endIdx > startIdx) {
-      return content.slice(0, startIdx).trim() + content.slice(endIdx + metaEnd.length).trim();
-    }
-    return content.slice(0, startIdx).trim();
-  }
-  return content;
-}
-
 function stripToolMetaAndArtifacts(content: string): string {
   return content
     .replace(/<<<TOOL_META_JSON>>>[\s\S]*?(<<<TOOL_META_JSON_END>>>|$)/g, '')

@@ -12,6 +12,7 @@
 """
 
 import logging
+import locale
 import re
 from pathlib import Path
 from typing import List
@@ -87,13 +88,24 @@ if not _WHITELIST_FILE.parent.exists():
     _BLACKLIST_FILE = Path(data_path("terminal_blacklist.txt"))
 
 
+def _read_config_lines(path: Path) -> List[str]:
+    """读取配置行，并兼容 Windows 本地编码写出的文本文件。"""
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        local_encoding = locale.getpreferredencoding(False)
+        if local_encoding.lower().replace("-", "") == "utf8":
+            raise
+        return path.read_text(encoding=local_encoding).splitlines()
+
+
 def _load_extra_list(path: Path) -> List[str]:
     """从文件加载额外列表 (一行一项, # 开头是注释)"""
     if not path.is_file():
         return []
     out: List[str] = []
     try:
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in _read_config_lines(path):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
@@ -109,7 +121,7 @@ def _load_extra_patterns(path: Path) -> List[str]:
         return []
     out: List[str] = []
     try:
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in _read_config_lines(path):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue

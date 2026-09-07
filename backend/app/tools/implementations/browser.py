@@ -1,3 +1,7 @@
+"""浏览器工具。
+
+支持两种运行模式：
+
 1. playwright（默认）：Playwright headless，服务端运行，用户不可见
 2. cdp：有头模式，通过 Chrome DevTools Protocol 连接用户本地 Chrome，
    用户可以看到真实浏览器窗口
